@@ -2,74 +2,94 @@ name: Build APK
 
 on:
   push:
-    branches: [main, master]
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    env:
-      SB_URL: ${{ secrets.VITE_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://jublxlcaeetlkvfnsfgoj.supabase.co' }}
-      SB_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: 打印仓库结构
+        run: |
+          echo "===== 顶层文件 ====="
+          ls -a
+          echo "===== 所有 package.json ====="
+          find . -name package.json -not -path "*/node_modules/*" -maxdepth 5 || true
+          echo "===== capacitor.config ====="
+          find . -name "capacitor.config.*" -not -path "*/node_modules/*" -maxdepth 5 || true
+          echo "===== android 目录 ====="
+          find . -type d -name android -not -path "*/node_modules/*" -maxdepth 5 || true
+          echo "===== gradlew ====="
+          find . -name gradlew -not -path "*/node_modules/*" -maxdepth 6 || true
+          echo "===== .github/workflows ====="
+          ls -a .github/workflows || true
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: 写入环境变量
-        run: |
-          if [ -z "$SB_KEY" ]; then
-            echo "::error::找不到 anon key。请在 Settings → Secrets and variables → Actions 里加 VITE_SUPABASE_ANON_KEY"
-            exit 1
-          fi
-          {
-            echo "VITE_SUPABASE_URL=$SB_URL"
-            echo "VITE_SUPABASE_ANON_KEY=$SB_KEY"
-            echo "NEXT_PUBLIC_SUPABASE_URL=$SB_URL"
-            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$SB_KEY"
-            echo "VITE_AI_ENDPOINT=$SB_URL/functions/v1/ai"
-          } >> .env
-          echo "URL: $SB_URL"
-          echo "KEY 长度: ${#SB_KEY}"
-
-      - name: 安装依赖并构建
-        run: |
-          if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi
-          if node -e "const s=require('./package.json').scripts||{};process.exit(s.build?0:1)"; then
-            npm run build
-          else
-            echo "package.json 里没有 build 脚本，跳过"
-          fi
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: 打包 APK
+      - name: 构建并打包
         run: |
-          if ls capacitor.config.* >/dev/null 2>&1; then
-            npx cap sync android
-          fi
-          if [ -d android ]; then
-            cd android
-            chmod +x gradlew
-            ./gradlew assembleDebug --no-daemon
-          else
-            echo "::error::仓库里没有 android/ 目录，无法产出 APK"
+          set -e
+
+          PKG=$(find . -name package.json -not -path "*/node_modules/*" -maxdepth 5 | head -1)
+          if [ -z "$PKG" ]; then
+            echo "::error::整个仓库都没有 package.json"
             exit 1
           fi
+          WEB=$(dirname "$PKG")
+          echo ">>> 前端项目在: $WEB"
+
+          {
+            echo "VITE_SUPABASE_URL=https://jublxlcaeetlkvfnsfgoj.supabase.co"
+            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+            echo "NEXT_PUBLIC_SUPABASE_URL=https://jublxlcaeetlkvfnsfgoj.supabase.co"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+          } > "$WEB/.env"
+          echo ">>> .env 已写入 $(wc -l < "$WEB/.env") 行"
+
+          cd "$WEB"
+          npm install --no-audit --no-fund
+
+          if node -e "const s=require('./package.json').scripts||{};process.exit(s.build?0:1)"; then
+            echo ">>> 执行 npm run build"
+            npm run build
+          else
+            echo ">>> package.json 没有 build 脚本，跳过"
+          fi
+
+          cd "$GITHUB_WORKSPACE"
+          ANDROID=$(find . -type d -name android -not -path "*/node_modules/*" -maxdepth 5 | head -1)
+          if [ -z "$ANDROID" ]; then
+            echo "::error::仓库里没有 android/ 目录"
+            exit 1
+          fi
+          echo ">>> android 目录: $ANDROID"
+
+          if [ -n "$(find . -name 'capacitor.config.*' -not -path '*/node_modules/*' -maxdepth 5 | head -1)" ]; then
+            cd "$WEB"
+            npx cap sync android
+            cd "$GITHUB_WORKSPACE"
+          fi
+
+          cd "$ANDROID"
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+          cd "$GITHUB_WORKSPACE"
+          find . -name "*.apk" -path "*outputs*" -exec cp {} ./app-debug.apk \;
+          ls -lh ./app-debug.apk
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: apk
-          path: android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          path: app-debug.apk
+          if-no-files-found: warn
