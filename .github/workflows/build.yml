@@ -2,77 +2,74 @@ name: Build APK
 
 on:
   push:
+    branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  apk:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SB_URL: ${{ secrets.VITE_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://jublxlcaeetlkvfnsfgoj.supabase.co' }}
+      SB_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 写入环境变量
+        run: |
+          if [ -z "$SB_KEY" ]; then
+            echo "::error::找不到 anon key。请在 Settings → Secrets and variables → Actions 里加 VITE_SUPABASE_ANON_KEY"
+            exit 1
+          fi
+          {
+            echo "VITE_SUPABASE_URL=$SB_URL"
+            echo "VITE_SUPABASE_ANON_KEY=$SB_KEY"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$SB_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$SB_KEY"
+            echo "VITE_AI_ENDPOINT=$SB_URL/functions/v1/ai"
+          } >> .env
+          echo "URL: $SB_URL"
+          echo "KEY 长度: ${#SB_KEY}"
+
+      - name: 安装依赖并构建
+        run: |
+          if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi
+          if node -e "const s=require('./package.json').scripts||{};process.exit(s.build?0:1)"; then
+            npm run build
+          else
+            echo "package.json 里没有 build 脚本，跳过"
+          fi
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: 17
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Unpack and install deps
+      - name: 打包 APK
         run: |
-          set -x
-          S=$GITHUB_STEP_SUMMARY
-          Z=$(ls *.zip | head -1)
-          echo "ZIP=$Z" >> $S
-          rm -rf app && mkdir app
-          unzip -q -o "$Z" -d app
-          echo '### zip 第一层' >> $S
-          echo '```' >> $S
-          ls -la app >> $S
-          echo '```' >> $S
-          P=$(ls app/package.json app/*/package.json 2>/dev/null | head -1)
-          echo "PACKAGE_JSON=$P" >> $S
-          if [ -z "$P" ]; then
-            echo '```' >> $S
-            find app -maxdepth 3 >> $S
-            echo '```' >> $S
+          if ls capacitor.config.* >/dev/null 2>&1; then
+            npx cap sync android
+          fi
+          if [ -d android ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --no-daemon
+          else
+            echo "::error::仓库里没有 android/ 目录，无法产出 APK"
             exit 1
           fi
-          echo "ROOT=$(dirname "$P")" >> $GITHUB_ENV
-          cd "$(dirname "$P")"
-          ls -la
-          npm install --no-audit --no-fund 2>&1 | tail -40
-          npm run build 2>&1 | tail -60
-          ls -la
-
-      - name: Package with Capacitor
-        run: |
-          set -x
-          S=$GITHUB_STEP_SUMMARY
-          cd "$ROOT"
-          WEB=""
-          for d in dist build www out public .; do
-            if [ -f "$d/index.html" ]; then WEB=$d; break; fi
-          done
-          echo "WEB=$WEB" >> $S
-          if [ -z "$WEB" ]; then
-            echo "error: no index.html found" >> $S
-            find . -maxdepth 2 -name 'index.html' | head >> $S
-            exit 1
-          fi
-          npm i -D @capacitor/cli 2>&1 | tail -5
-          npm i @capacitor/core @capacitor/android 2>&1 | tail -5
-          [ -f capacitor.config.ts ] || [ -f capacitor.config.json ] || npx cap init app com.arden.app --web-dir "$WEB"
-          [ -d android ] || npx cap add android
-          npx cap sync android
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon 2>&1 | tail -80
 
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: apk
-          path: '**/*.apk'
-          if-no-files-found: warn
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
