@@ -10,80 +10,66 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - uses: android-actions/setup-android@v3
-
-      - name: Inspect zip
+      - name: Inspect
         run: |
-          set -x
-          ls -la
-          Z=$(echo *.zip | awk '{print $1}')
-          echo "ZIP=$Z"
-          unzip -l "$Z" > /tmp/zip.txt 2>&1 || true
-          head -150 /tmp/zip.txt || true
-          tail -5 /tmp/zip.txt || true
-          echo INSPECT-OK
-
-      - name: Unpack
-        run: |
-          set -x
-          Z=$(echo *.zip | awk '{print $1}')
+          set +e
+          D="$GITHUB_WORKSPACE/diag.txt"
+          : > "$D"
+          echo "PWD=$(pwd)" >> "$D"
+          Z=$(ls *.zip 2>/dev/null | head -1)
+          echo "ZIP=$Z" >> "$D"
+          echo "::warning::ZIP=${Z}"
           mkdir -p work
-          unzip -q -o "$Z" -d work
-          ls -la work
-          echo UNPACK-OK
+          unzip -q -o "$Z" -d work >> "$D" 2>&1
+          ls -la work >> "$D"
+          find work -maxdepth 3 >> "$D"
+          for d in $(ls work | head -6); do echo "::warning::work/$d"; done
 
       - name: Build
+        continue-on-error: true
         run: |
           set -x
-          PJ=$(find work -maxdepth 4 -name package.json -not -path '*/node_modules/*' | sed -n 1p)
-          if [ -n "$PJ" ]; then ROOT=$(dirname "$PJ"); else ROOT="work"; fi
-          echo "ROOT=$ROOT"
+          D="$GITHUB_WORKSPACE/diag.txt"
+          P=$(ls work/package.json work/*/package.json work/*/*/package.json 2>/dev/null | head -1)
+          if [ -n "$P" ]; then ROOT=$(dirname "$P"); else ROOT=work; fi
+          echo "ROOT=$ROOT" | tee -a "$D"
           cd "$ROOT"
           ls -la
-          if [ -f scripts/build-apk.sh ]; then bash scripts/build-apk.sh || true; fi
-          APK=$(find . -name '*.apk' -not -path '*/node_modules/*' -print -quit)
-          if [ -z "$APK" ]; then
-            if [ -f package.json ]; then
-              npm install --no-audit --no-fund || true
-              npm run build || true
-            fi
-            if [ -f android/gradlew ]; then
-              APK_DIR=android
-            else
-              WEB=""
-              for d in dist build www public out; do [ -d "$d" ] && WEB="$d" && break; done
-              if [ -z "$WEB" ]; then
-                mkdir -p www
-                cp -r index.html *.js *.css assets public css js www/ 2>/dev/null || true
-                WEB="www"
-              fi
-              echo "WEB=$WEB"
-              [ -f package.json ] || npm init -y
-              npm i -D @capacitor/cli || true
-              npm i @capacitor/core @capacitor/android || true
-              ls capacitor.config.* >/dev/null 2>&1 || npx --yes cap init App com.example.app --web-dir "$WEB"
-              [ -d android ] || npx --yes cap add android
-              npx --yes cap sync android
-              APK_DIR=android
-            fi
-            cd "$APK_DIR"
-            chmod +x gradlew
-            ./gradlew assembleDebug --no-daemon --stacktrace
+          if [ -f package.json ]; then
+            npm install --no-audit --no-fund || true
+            npm run build || true
           fi
-          find .. -name '*.apk' -print || true
+          if [ -f android/gradlew ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee -a "$D"
+            exit 0
+          fi
+          WEB=""
+          for d in dist build www out public; do
+            if [ -d "$d" ]; then WEB="$d"; break; fi
+          done
+          if [ -z "$WEB" ]; then
+            mkdir -p www
+            cp -r ./*.html ./*.js ./*.css ./assets ./public www/ 2>/dev/null || true
+            WEB=www
+          fi
+          echo "WEB=$WEB" | tee -a "$D"
+          [ -f package.json ] || npm init -y
+          npm i -D @capacitor/cli || true
+          npm i @capacitor/core @capacitor/android || true
+          [ -f capacitor.config.ts ] || [ -f capacitor.config.json ] || npx cap init App com.example.app --web-dir "$WEB" || true
+          [ -d android ] || npx cap add android || true
+          npx cap sync android || true
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee -a "$D"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: efficiency-cloud-apk
-          path: '**/*.apk'
+          name: apk-and-logs
+          path: |
+            **/*.apk
+            diag.txt
           if-no-files-found: warn
