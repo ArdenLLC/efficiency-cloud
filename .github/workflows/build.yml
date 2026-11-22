@@ -3,6 +3,9 @@ name: Build APK
 on:
   push:
   workflow_dispatch:
+  env:
+  VITE_SUPABASE_URL: https://jublxlcaeetlkvfnsfgoj.supabase.co
+  VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
 jobs:
   apk:
