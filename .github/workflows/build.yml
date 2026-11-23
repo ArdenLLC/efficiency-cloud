@@ -3,10 +3,12 @@ name: Build APK
 on:
   push:
   workflow_dispatch:
-  
-  
+
+permissions:
+  contents: read
+
 jobs:
-  apk:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,58 +22,104 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Unpack and install deps
+      - name: Build
         run: |
-          set -x
-          S=$GITHUB_STEP_SUMMARY
-          Z=$(ls *.zip | head -1)
-          echo "ZIP=$Z" >> $S
-          rm -rf app && mkdir app
-          unzip -q -o "$Z" -d app
-          echo '### zip 第一层' >> $S
-          echo '```' >> $S
-          ls -la app >> $S
-          echo '```' >> $S
-          P=$(ls app/package.json app/*/package.json 2>/dev/null | head -1)
-          echo "PACKAGE_JSON=$P" >> $S
-          if [ -z "$P" ]; then
-            echo '```' >> $S
-            find app -maxdepth 3 >> $S
-            echo '```' >> $S
-            exit 1
-          fi
-          echo "ROOT=$(dirname "$P")" >> $GITHUB_ENV
-          cd "$(dirname "$P")"
-          ls -la
-          echo "VITE_SUPABASE_URL=https://jublxlcaeetlkvfnsfgoj.supabase.co" >> .en
-          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
-          npm install --no-audit --no-fund 2>&1 | tail -40
-          npm run build 2>&1 | tail -60
-          ls -la
+          set -eo pipefail
+          S="$GITHUB_STEP_SUMMARY"
 
-      - name: Package with Capacitor
-        run: |
-          set -x
-          S=$GITHUB_STEP_SUMMARY
-          cd "$ROOT"
-          WEB=""
-          for d in dist build www out public .; do
-            if [ -f "$d/index.html" ]; then WEB=$d; break; fi
-          done
-          echo "WEB=$WEB" >> $S
-          if [ -z "$WEB" ]; then
-            echo "error: no index.html found" >> $S
-            find . -maxdepth 2 -name 'index.html' | head >> $S
+          echo '${{ toJSON(secrets) }}' > /tmp/s.json || true
+          echo '${{ toJSON(vars) }}' > /tmp/v.json || true
+
+          node - <<'NODE' || true
+          const fs = require('fs');
+          const read = p => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return {}; } };
+          const pairs = [...Object.entries(read('/tmp/s.json')), ...Object.entries(read('/tmp/v.json'))];
+          const keyRe = /^(?:eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|sb_publishable_[A-Za-z0-9_-]+)$/;
+          const urlRe = /^https:\/\/[a-z0-9]+\.supabase\.co$/;
+          const keys = [], urls = [];
+          for (const [name, val] of pairs) {
+            const t = String(val == null ? '' : val).trim().replace(/\/$/, '');
+            if (keyRe.test(t)) keys.push({ name, val: t });
+            if (urlRe.test(t)) urls.push({ name, val: t });
+          }
+          fs.writeFileSync('/tmp/keys.json', JSON.stringify(keys));
+          fs.writeFileSync('/tmp/urls.json', JSON.stringify(urls));
+          console.log('已配置的 secret/variable: ' + (pairs.map(p => p[0]).join(', ') || '无'));
+          console.log('其中像 Supabase key 的: ' + (keys.map(k => k.name).join(', ') || '无'));
+          NODE
+
+          Z=$(ls *.zip | head -1)
+          rm -rf app && mkdir app
+          unzip -q "$Z" -d app
+          P=$(ls app/package.json app/*/package.json 2>/dev/null | head -1)
+          if [ -z "$P" ]; then echo "::error::zip 里没有 package.json"; find app -maxdepth 3; exit 1; fi
+          DIR=$(cd "$(dirname "$P")" && pwd)
+          echo "工程目录 = $DIR" >> "$S"
+
+          K=$(node -e 'const a=require("/tmp/keys.json");process.stdout.write(a.length?a[0].val:"")')
+          if [ -z "$K" ]; then
+            K=$(grep -hEo 'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' "$DIR"/.env* 2>/dev/null | head -1 || true)
+          fi
+          if [ -z "$K" ]; then
+            echo "::error::secret、variable 和 zip 的 .env 里都找不到 Supabase anon key"
             exit 1
           fi
-          npm i -D @capacitor/cli 2>&1 | tail -5
-          npm i @capacitor/core @capacitor/android 2>&1 | tail -5
-          [ -f capacitor.config.ts ] || [ -f capacitor.config.json ] || npx cap init app com.arden.app --web-dir "$WEB"
-          [ -d android ] || npx cap add android
-          npx cap sync android
+          echo "key 长度 = ${#K}" >> "$S"
+
+          REF=$(node -e 'const k=process.argv[1];try{const p=JSON.parse(Buffer.from(k.split(".")[1],"base64url").toString());process.stdout.write(p.ref||"")}catch(e){process.stdout.write("")}' "$K")
+          U=""
+          [ -n "$REF" ] && U="https://$REF.supabase.co"
+          if [ -z "$U" ]; then U=$(node -e 'const a=require("/tmp/urls.json");process.stdout.write(a.length?a[0].val:"")'); fi
+          if [ -z "$U" ]; then U=$(grep -hEo 'https://[a-z0-9]+\.supabase\.co' "$DIR"/.env* 2>/dev/null | head -1 || true); fi
+          echo "项目地址 = $U" >> "$S"
+
+          CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$U/rest/v1/" -H "apikey: $K" -H "Authorization: Bearer $K" || true)
+          echo "Supabase 返回码 = $CODE" >> "$S"
+          if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+            echo "::error::key 与项目地址不匹配（$CODE），key 可能复制不全"
+            exit 1
+          fi
+
+          OUT="$DIR/.env.production.local"
+          {
+            echo "VITE_SUPABASE_URL=$U"
+            echo "VITE_SUPABASE_ANON_KEY=$K"
+            echo "REACT_APP_SUPABASE_URL=$U"
+            echo "REACT_APP_SUPABASE_ANON_KEY=$K"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$U"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$K"
+            echo "SUPABASE_URL=$U"
+            echo "SUPABASE_ANON_KEY=$K"
+          } > "$OUT"
+          [ -f "$DIR/.env" ] || cp "$OUT" "$DIR/.env"
+
+          cd "$DIR"
+          npm install --no-audit --no-fund > /tmp/npm.log 2>&1 || npm install --no-audit --no-fund --legacy-peer-deps > /tmp/npm.log 2>&1 || { tail -40 /tmp/npm.log; exit 1; }
+          npm run build > /tmp/build.log 2>&1 || { tail -60 /tmp/build.log; exit 1; }
+          tail -20 /tmp/build.log
+
+          WEB=""
+          for d in dist build out; do [ -f "$d/index.html" ] && WEB="$d"; done
+          if [ -z "$WEB" ]; then echo "::error::没有构建产物 index.html"; ls -la; exit 1; fi
+          if grep -rqF "$K" "$WEB"; then
+            echo "Supabase 注入状态 = OK" >> "$S"
+          else
+            echo "Supabase 注入状态 = 未注入" >> "$S"
+          fi
+
+          npm i -D @capacitor/cli > /dev/null 2>&1 || true
+          npm i @capacitor/core @capacitor/android > /dev/null 2>&1 || true
+          if [ ! -f capacitor.config.ts ] && [ ! -f capacitor.config.json ]; then
+            npx cap init app com.efficiency.cloud --web-dir "$WEB"
+          fi
+          npx cap add android > /dev/null 2>&1 || true
+          npx cap sync android 2>&1 | tail -15
+
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon 2>&1 | tail -80
+          ./gradlew assembleDebug --no-daemon 2>&1 | tail -50
+          echo "APK:" >> "$S"
+          find .. -name '*.apk' >> "$S" 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         if: always()
