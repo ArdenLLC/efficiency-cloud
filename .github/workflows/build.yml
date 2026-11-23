@@ -3,9 +3,7 @@ name: Build APK
 on:
   push:
   workflow_dispatch:
-  env:
-  VITE_SUPABASE_URL: https://jublxlcaeetlkvfnsfgoj.supabase.co
-  VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+  
   
 jobs:
   apk:
@@ -45,6 +43,8 @@ jobs:
           echo "ROOT=$(dirname "$P")" >> $GITHUB_ENV
           cd "$(dirname "$P")"
           ls -la
+          echo "VITE_SUPABASE_URL=https://jublxlcaeetlkvfnsfgoj.supabase.co" >> .en
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
           npm install --no-audit --no-fund 2>&1 | tail -40
           npm run build 2>&1 | tail -60
           ls -la
