@@ -10,6 +10,17 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      K_A: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      K_B: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      K_C: ${{ secrets.SUPABASE_ANON_KEY }}
+      K_D: ${{ vars.SUPABASE_ANON_KEY }}
+      K_E: ${{ secrets.VITE_SUPABASE_KEY }}
+      K_F: ${{ vars.VITE_SUPABASE_KEY }}
+      U_A: ${{ secrets.VITE_SUPABASE_URL }}
+      U_B: ${{ vars.VITE_SUPABASE_URL }}
+      U_C: ${{ secrets.SUPABASE_URL }}
+      U_D: ${{ vars.SUPABASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,80 +38,64 @@ jobs:
           set -eo pipefail
           S="$GITHUB_STEP_SUMMARY"
 
-          echo '${{ toJSON(secrets) }}' > /tmp/s.json || true
-          echo '${{ toJSON(vars) }}' > /tmp/v.json || true
-
-          node - <<'NODE' || true
-          const fs = require('fs');
-          const read = p => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return {}; } };
-          const pairs = [...Object.entries(read('/tmp/s.json')), ...Object.entries(read('/tmp/v.json'))];
-          const keyRe = /^(?:eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|sb_publishable_[A-Za-z0-9_-]+)$/;
-          const urlRe = /^https:\/\/[a-z0-9]+\.supabase\.co$/;
-          const keys = [], urls = [];
-          for (const [name, val] of pairs) {
-            const t = String(val == null ? '' : val).trim().replace(/\/$/, '');
-            if (keyRe.test(t)) keys.push({ name, val: t });
-            if (urlRe.test(t)) urls.push({ name, val: t });
-          }
-          fs.writeFileSync('/tmp/keys.json', JSON.stringify(keys));
-          fs.writeFileSync('/tmp/urls.json', JSON.stringify(urls));
-          console.log('已配置的 secret/variable: ' + (pairs.map(p => p[0]).join(', ') || '无'));
-          console.log('其中像 Supabase key 的: ' + (keys.map(k => k.name).join(', ') || '无'));
-          NODE
-
-          Z=$(ls *.zip | head -1)
+          Z=$(ls *.zip 2>/dev/null | head -1 || true)
+          if [ -z "$Z" ]; then echo "::error::仓库根目录没有 zip"; exit 1; fi
           rm -rf app && mkdir app
           unzip -q "$Z" -d app
-          P=$(ls app/package.json app/*/package.json 2>/dev/null | head -1)
+          P=$(ls app/package.json app/*/package.json 2>/dev/null | head -1 || true)
           if [ -z "$P" ]; then echo "::error::zip 里没有 package.json"; find app -maxdepth 3; exit 1; fi
           DIR=$(cd "$(dirname "$P")" && pwd)
           echo "工程目录 = $DIR" >> "$S"
 
-          K=$(node -e 'const a=require("/tmp/keys.json");process.stdout.write(a.length?a[0].val:"")')
+          K=""
+          for v in "$K_A" "$K_B" "$K_C" "$K_D" "$K_E" "$K_F"; do
+            if [ -z "$K" ] && [ -n "$v" ]; then K="$v"; fi
+          done
+          K=$(printf '%s' "$K" | tr -d '[:space:]')
           if [ -z "$K" ]; then
             K=$(grep -hEo 'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' "$DIR"/.env* 2>/dev/null | head -1 || true)
           fi
-          if [ -z "$K" ]; then
-            echo "::error::secret、variable 和 zip 的 .env 里都找不到 Supabase anon key"
-            exit 1
-          fi
+          if [ -z "$K" ]; then echo "::error::没找到 Supabase anon key"; exit 1; fi
           echo "key 长度 = ${#K}" >> "$S"
 
-          REF=$(node -e 'const k=process.argv[1];try{const p=JSON.parse(Buffer.from(k.split(".")[1],"base64url").toString());process.stdout.write(p.ref||"")}catch(e){process.stdout.write("")}' "$K")
           U=""
-          [ -n "$REF" ] && U="https://$REF.supabase.co"
-          if [ -z "$U" ]; then U=$(node -e 'const a=require("/tmp/urls.json");process.stdout.write(a.length?a[0].val:"")'); fi
-          if [ -z "$U" ]; then U=$(grep -hEo 'https://[a-z0-9]+\.supabase\.co' "$DIR"/.env* 2>/dev/null | head -1 || true); fi
+          for v in "$U_A" "$U_B" "$U_C" "$U_D"; do
+            if [ -z "$U" ] && [ -n "$v" ]; then U="$v"; fi
+          done
+          U=$(printf '%s' "$U" | tr -d '[:space:]' | sed 's#/rest/v1/*$##; s#/*$##')
+          if [ -z "$U" ]; then
+            REF=$(node -e 'try{const p=JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base64url").toString());process.stdout.write(p.ref||"")}catch(e){}' "$K")
+            if [ -n "$REF" ]; then U="https://$REF.supabase.co"; fi
+          fi
+          if [ -z "$U" ]; then
+            U=$(grep -hEo 'https://[a-z0-9]+\.supabase\.co' "$DIR"/.env* 2>/dev/null | head -1 || true)
+          fi
           echo "项目地址 = $U" >> "$S"
 
           CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$U/rest/v1/" -H "apikey: $K" -H "Authorization: Bearer $K" || true)
           echo "Supabase 返回码 = $CODE" >> "$S"
-          if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
-            echo "::error::key 与项目地址不匹配（$CODE），key 可能复制不全"
-            exit 1
-          fi
+          if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then echo "::error::key 与项目地址不匹配"; exit 1; fi
 
-          OUT="$DIR/.env.production.local"
+          ENVF="$DIR/.env.production.local"
           {
-            echo "VITE_SUPABASE_URL=$U"
-            echo "VITE_SUPABASE_ANON_KEY=$K"
-            echo "REACT_APP_SUPABASE_URL=$U"
-            echo "REACT_APP_SUPABASE_ANON_KEY=$K"
-            echo "NEXT_PUBLIC_SUPABASE_URL=$U"
-            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$K"
+            for pre in VITE REACT_APP NEXT_PUBLIC; do
+              echo "${pre}_SUPABASE_URL=$U"
+              echo "${pre}_SUPABASE_ANON_KEY=$K"
+            done
             echo "SUPABASE_URL=$U"
             echo "SUPABASE_ANON_KEY=$K"
-          } > "$OUT"
-          [ -f "$DIR/.env" ] || cp "$OUT" "$DIR/.env"
+          } > "$ENVF"
+          if [ ! -f "$DIR/.env" ]; then cp "$ENVF" "$DIR/.env"; fi
 
           cd "$DIR"
           npm install --no-audit --no-fund > /tmp/npm.log 2>&1 || npm install --no-audit --no-fund --legacy-peer-deps > /tmp/npm.log 2>&1 || { tail -40 /tmp/npm.log; exit 1; }
-          npm run build > /tmp/build.log 2>&1 || { tail -60 /tmp/build.log; exit 1; }
-          tail -20 /tmp/build.log
+          npm run build > /tmp/build.log 2>&1 || { tail -50 /tmp/build.log; exit 1; }
 
           WEB=""
-          for d in dist build out; do [ -f "$d/index.html" ] && WEB="$d"; done
-          if [ -z "$WEB" ]; then echo "::error::没有构建产物 index.html"; ls -la; exit 1; fi
+          for d in dist build out; do
+            if [ -f "$d/index.html" ]; then WEB="$d"; fi
+          done
+          if [ -z "$WEB" ]; then echo "::error::没有 index.html"; ls -la; exit 1; fi
           if grep -rqF "$K" "$WEB"; then
             echo "Supabase 注入状态 = OK" >> "$S"
           else
@@ -118,8 +113,7 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon 2>&1 | tail -50
-          echo "APK:" >> "$S"
-          find .. -name '*.apk' >> "$S" 2>/dev/null || true
+          find "$DIR" -name '*.apk' >> "$S" 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         if: always()
