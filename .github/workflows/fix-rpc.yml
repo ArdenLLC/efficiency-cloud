@@ -1,0 +1,108 @@
+name: fix-rpc
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解压源码
+        run: |
+          set -eo pipefail
+          ls -la
+          ZIP=$(find . -maxdepth 3 -name "*.zip" -not -path "./.git/*" | head -n1)
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+          rm -rf work && mkdir -p work
+          if [ -n "$ZIP" ]; then unzip -o -q "$ZIP" -d work; else rsync -a --exclude .git ./ work/; fi
+          echo "===== work 顶层 ====="
+          ls -la work | head -40
+
+      - name: 扫描并自动补 p_target
+        run: |
+          set -eo pipefail
+          python3 - <<'PY'
+          import os, re, difflib
+          root = 'work'
+          exts = ('.js', '.jsx', '.ts', '.tsx')
+          names = ('block_user', 'report_user', 'unblock_user')
+          rpc_re = re.compile(r"rpc\(\s*(['\"])(block_user|report_user|unblock_user)\1\s*(?:,\s*\{([^{}]*)\})?\s*\)", re.S)
+          id_re = re.compile(r"([A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*)\s*\??\.\s*id\b")
+          bad = ('user.id', 'me.id', 'session.id', 'currentUser.id', 'auth.uid')
+          changed = []
+
+          print("===== A. 所有调用点 =====")
+          for dp, _, fs in os.walk(root):
+              if 'node_modules' in dp: continue
+              for f in fs:
+                  if not f.endswith(exts): continue
+                  p = os.path.join(dp, f)
+                  try: src = open(p, encoding='utf-8').read()
+                  except: continue
+                  if not any(n in src for n in names): continue
+                  for i, line in enumerate(src.splitlines(), 1):
+                      if any(n in line for n in names):
+                          print(f"{p}:{i}: {line.strip()[:200]}")
+
+          print("\n===== B. 打补丁 =====")
+          for dp, _, fs in os.walk(root):
+              if 'node_modules' in dp: continue
+              for f in fs:
+                  if not f.endswith(exts): continue
+                  p = os.path.join(dp, f)
+                  try: src = open(p, encoding='utf-8').read()
+                  except: continue
+                  if not any(n in src for n in names): continue
+                  out, last, hits = [], 0, 0
+                  for m in rpc_re.finditer(src):
+                      fn, args = m.group(2), (m.group(3) or '')
+                      if 'p_target' in args or 'p_handle' in args: continue
+                      cands = list(id_re.finditer(src, 0, m.start()))
+                      expr = None
+                      while cands:
+                          e = cands.pop().group(1).strip()
+                          e = re.sub(r'^.*?([A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*)$', r'\1', e)
+                          if not e.endswith('.id') and e not in bad:
+                              expr = e; break
+                          expr = None
+                      if not expr:
+                          print(f" [跳过] {p}: 找不到可用的目标变量")
+                          continue
+                      newargs = (args.strip() + ', ' if args.strip() else '') + f'p_target: {expr}'
+                      rep = f"rpc({m.group(1)}{fn}{m.group(1)}, {{ {newargs} }})"
+                      out.append(src[last:m.start()]); out.append(rep)
+                      last = m.end(); hits += 1
+                  if hits:
+                      out.append(src[last:])
+                      new = ''.join(out)
+                      open(p, 'w', encoding='utf-8').write(new)
+                      changed.append(f"{p} ({hits} 处)")
+                      print(f" [已改] {p} {hits} 处")
+                      for l in list(difflib.unified_diff(src.splitlines(), new.splitlines(), lineterm='', n=2))[:40]:
+                          print(" ", l)
+          print("\nPATCHED:", changed if changed else "无（说明调用点不在 js/jsx/ts/tsx 里）")
+          open('/tmp/patched.txt', 'w').write("\n".join(changed))
+          PY
+
+      - name: 重新打包并提交
+        run: |
+          set -eo pipefail
+          if [ ! -s /tmp/patched.txt ]; then
+            echo "没有改动，不提交。请看上面的 A/B 段。"; exit 0
+          fi
+          if [ -n "$ZIP" ]; then
+            (cd work && zip -rq "../$ZIP" .)
+          else
+            rsync -a --exclude .git work/ ./
+          fi
+          git config user.name "efficiency-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: 屏蔽/举报 RPC 补传目标用户 id（自动）"
+          git push
+          echo "已提交，build.yml 会自动开始打包。"
