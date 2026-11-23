@@ -1,0 +1,65 @@
+name: scan-rpc
+on: workflow_dispatch
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 定位源码
+        run: |
+          set -euo pipefail
+          if [ -d work/efficiency-cloud-v1 ]; then
+            SRC="work/efficiency-cloud-v1"
+            echo "用已解压目录"
+          else
+            mkdir -p src
+            Z=$(find . -path ./.git -prune -o -name '*.zip' -print | head -1)
+            if [ -z "$Z" ]; then echo "::error::没找到 zip"; exit 1; fi
+            echo "解压: $Z"
+            unzip -o -q "$Z" -d src
+            SRC=$(find src -maxdepth 1 -mindepth 1 -type d | head -1)
+            if [ -z "$SRC" ]; then SRC=src; fi
+          fi
+          N=$(find "$SRC" -type f | wc -l)
+          echo "源码目录: $SRC  文件数: $N"
+          if [ "$N" -lt 20 ]; then echo "::error::文件太少($N)，路径不对"; exit 1; fi
+          echo "SRC=$SRC" >> "$GITHUB_ENV"
+          echo "### 源码目录：$SRC（$N 个文件）" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 生成清单
+        run: |
+          set -uo pipefail
+          S="$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "## 1) report_user / block_user / unblock_user"
+            echo '```'
+          } >> "$S"
+          grep -rn --binary-files=without-match -E "report_user|block_user|unblock_user" "$SRC" >> "$S" || echo "(无匹配)" >> "$S"
+          {
+            echo '```'
+            echo ""
+            echo "## 2) 所有 .rpc( 调用"
+            echo '```'
+          } >> "$S"
+          grep -rn --binary-files=without-match --include='*.js' --include='*.jsx' --include='*.ts' --include='*.tsx' --include='*.vue' --include='*.html' -E "\.rpc\(" "$SRC" >> "$S" || echo "(无匹配)" >> "$S"
+          {
+            echo '```'
+            echo ""
+            echo "## 3) 中文：举报 / 屏蔽"
+            echo '```'
+          } >> "$S"
+          grep -rn --binary-files=without-match --include='*.js' --include='*.jsx' --include='*.ts' --include='*.tsx' --include='*.vue' --include='*.html' -E "举报|屏蔽" "$SRC" >> "$S" || echo "(无匹配)" >> "$S"
+          {
+            echo '```'
+            echo ""
+            echo "## 4) 文件名里带 report / block 的"
+            echo '```'
+          } >> "$S"
+          find "$SRC" -type f \( -iname '*report*' -o -iname '*block*' \) >> "$S" || echo "(无匹配)" >> "$S"
+          echo '```' >> "$S"
+          echo "写完了"
