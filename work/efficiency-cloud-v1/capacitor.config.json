@@ -1,0 +1,7 @@
+{
+  "appId": "online.ardenllc.efficiencycloud",
+  "appName": "效率云",
+  "webDir": "dist",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

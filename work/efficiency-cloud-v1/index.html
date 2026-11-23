@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827"><meta name="description" content="效率云：原创任务管理与效率规划工具。"><meta name="application-name" content="效率云">
+  <link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="效率云"><meta name="format-detection" content="telephone=no"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css">
+  <title>效率云 · Efficiency Cloud</title>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar"><a class="brand" href="./"><img class="brand-mark" src="./icon.svg" alt="效率云原创图标"><span><strong>效率云</strong><small>EFFICIENCY CLOUD</small></span></a>
+    <div class="topbar-right"><span id="connectionStatus" class="status-pill"><i></i>准备就绪</span><button id="logoutBtn" class="btn btn-quiet hidden">退出登录</button></div>
+  </header>
+  <main>
+    <section id="authView" class="auth-layout"><div class="hero-panel"><div class="eyebrow">PERSONAL PRODUCTIVITY · 3.4.0</div><h1>把重要的事，<br><span>稳稳推进。</span></h1><p>任务、日程和进度一目了然。让每一天都有方向，让每一步都可衡量。</p><div class="hero-stats"><div><strong>01</strong><span>规划任务</span></div><div><strong>02</strong><span>持续执行</span></div><div><strong>03</strong><span>复盘成长</span></div></div></div>
+      <div class="auth-card">
+        <div class="auth-heading"><span class="eyebrow">YOUR SECURE SPACE</span><h2 id="authTitle">登录效率云</h2><p id="authSubtitle">选择适合你的安全登录方式。</p></div>
+        <div class="auth-tabs" role="tablist" aria-label="登录方式">
+          <button class="auth-tab active" type="button" data-auth-tab="email">邮箱</button>
+          <button class="auth-tab" type="button" data-auth-tab="phone">手机号</button>
+        </div>
+        <form id="authForm">
+          <div id="emailAuthFields">
+            <label for="email">邮箱地址</label><input id="email" type="email" autocomplete="email" placeholder="name@example.com" required>
+            <label for="password">密码</label><input id="password" type="password" autocomplete="current-password" minlength="8" placeholder="至少 8 位" required>
+            <div id="confirmPasswordWrap" class="hidden"><label for="confirmPassword">确认密码</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" placeholder="再次输入密码"><p class="fine-print">密码至少 8 位，需同时包含字母和数字。</p></div>
+            <button id="authSubmit" class="btn btn-primary btn-full" type="submit">登录效率云 ID</button>
+            <button id="forgotPassword" class="text-button forgot-password" type="button">忘记密码？发送重置邮件</button>
+          </div>
+          <div id="phoneAuthFields" class="hidden">
+            <label for="phone">手机号码（含国家区号）</label><input id="phone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567">
+            <div class="phone-code-row"><label for="phoneCode">短信验证码</label><button id="sendPhoneCode" class="text-button" type="button">发送验证码</button></div>
+            <input id="phoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="输入收到的验证码">
+            <button id="verifyPhoneCode" class="btn btn-primary btn-full" type="button">验证并登录 / 注册</button>
+          </div>
+        </form>
+        <div class="auth-divider" id="authDivider"><span>或使用以下方式继续</span></div>
+        <div class="social-auth" id="socialAuth">
+          <button id="googleAuth" class="social-btn" type="button"><span class="social-symbol google-symbol">G</span>使用 Google 继续</button>
+          <button id="appleAuth" class="social-btn" type="button"><span class="social-symbol apple-symbol">●</span>使用 Apple 继续</button>
+        </div>
+        <label class="consent-row"><input id="legalConsent" type="checkbox"> <span>我已阅读并同意 <a href="./legal/terms.html" target="_blank" rel="noopener">服务条款</a>、<a href="./legal/privacy.html" target="_blank" rel="noopener">隐私政策</a>及<a href="./legal/disclaimer.html" target="_blank" rel="noopener">免责声明</a>、<a href="./legal/company.html" target="_blank" rel="noopener">公司声明</a>、<a href="./legal/ip.html" target="_blank" rel="noopener">原创与禁止侵权声明</a>。</span></label>
+        <p id="authMessage" class="message" role="status" aria-live="polite"></p>
+        <div class="auth-switch"><span id="switchText">还没有账户？</span><button id="switchAuth" class="text-button" type="button">创建账户</button></div>
+        <p class="fine-print">继续即表示你已阅读并同意 <a href="./legal/terms.html" target="_blank" rel="noopener">服务条款</a> 与 <a href="./legal/privacy.html" target="_blank" rel="noopener">隐私政策</a>。注册时请确保你符合所在地的最低年龄要求。</p>
+      </div>
+    </section>
+    <section id="dashboardView" class="dashboard hidden">
+      <div class="welcome-row"><div><div class="eyebrow">YOUR WORKSPACE</div><h1>今天，向前一步。</h1><p id="userLabel" class="muted"></p></div><button id="addTaskTop" class="btn btn-primary">＋ 新建任务</button></div>
+      <section class="task-panel account-panel"><div class="panel-heading"><div><h2>☁️ 效率云 ID</h2><p class="muted">一个独立账户，在支持效率云的设备间同步你的任务、回忆和好友。</p></div><span class="tag">个人账户</span></div><div class="account-id-row"><div><small>你的效率云 ID</small><strong id="cloudAccountId">正在读取…</strong></div><button id="copyCloudId" class="btn btn-outline" type="button">复制 ID</button></div><div class="account-controls"><form id="changePasswordForm" class="feature-form inline-feature"><input id="newAccountPassword" type="password" minlength="8" autocomplete="new-password" placeholder="设置新密码（至少 8 位）" required><button class="btn btn-outline" type="submit">更新密码</button></form><button id="sendAccountRecovery" class="text-button" type="button">向账户邮箱发送密码重置链接</button></div><label class="security-alert-setting"><input id="securityEmailAlerts" type="checkbox" checked> 通过邮箱接收新登录和密码变更提醒</label><div class="account-extra"><h3>账户安全与数据</h3><div class="account-actions"><button id="signOutAll" class="btn btn-outline" type="button">退出所有设备</button><button id="exportData" class="btn btn-outline" type="button">导出我的数据</button><button id="deleteAccount" class="btn btn-danger" type="button">删除账户</button></div></div>
+      <p id="recoveryStatus" class="message" role="status" aria-live="polite"></p><p class="fine-print">效率云 ID 由本服务独立分配，不是 Apple ID，也不能用于登录 Apple 服务。Apple 登录仅作为可选的第三方登录方式。</p></section>
+            <div class="stats-grid"><article class="stat-card"><span>全部任务</span><strong id="totalCount">0</strong><small>当前任务总数</small></article><article class="stat-card"><span>待完成</span><strong id="pendingCount">0</strong><small>等待推进</small></article><article class="stat-card"><span>已完成</span><strong id="doneCount">0</strong><small>已完成事项</small></article><article class="stat-card progress-card"><span>整体完成率</span><strong id="completionRate">0%</strong><div class="progress-track"><i id="overallProgress"></i></div></article></div>
+      <section class="task-panel"><div class="panel-heading"><div><h2>任务清单</h2><p class="muted">把目标拆解成今天可以完成的行动。</p></div><div class="filters"><input id="searchTasks" type="search" placeholder="搜索任务…" aria-label="搜索任务"><select id="filterCategory"><option value="全部">全部分类</option><option>工作</option><option>学习</option><option>生活</option><option>其他</option></select><select id="filterStatus"><option value="全部">全部状态</option><option value="待完成">待完成</option><option value="已完成">已完成</option></select></div></div>
+        <form id="taskForm" class="task-form"><div class="form-field task-name-field"><label for="taskName">任务名称</label><input id="taskName" maxlength="120" placeholder="例如：整理本周计划" required></div><div class="form-field"><label for="taskCategory">分类</label><select id="taskCategory"><option>其他</option><option>工作</option><option>学习</option><option>生活</option></select></div><div class="form-field"><label for="taskDue">截止日期</label><input id="taskDue" type="date"></div><div class="form-field"><label for="taskPriority">优先级</label><select id="taskPriority"><option value="normal">普通</option><option value="high">重要</option><option value="urgent">紧急</option></select></div><button class="btn btn-primary add-task-btn" type="submit">添加任务</button></form>
+        <div id="taskList" class="task-list"></div><div id="emptyState" class="empty-state"><div class="empty-icon">✓</div><strong>从一件小事开始</strong><p>添加第一项任务，让计划变得清晰。</p></div>
+      </section>
+      <section class="task-panel" id="reviewPanel"><div class="panel-heading"><div><h2>🕰️ 回顾：我做过什么</h2><p class="muted">按日期查看你完成的任务和写下的回忆，多设备自动同步。</p></div></div>
+        <div class="review-controls"><button class="btn btn-outline" type="button" data-range="0">今天</button><button class="btn btn-outline" type="button" data-range="7">近 7 天</button><button class="btn btn-outline" type="button" data-range="30">近 30 天</button><input id="reviewFrom" type="date" aria-label="开始日期"><input id="reviewTo" type="date" aria-label="结束日期"><button id="reviewGo" class="btn btn-primary" type="button">查看</button></div>
+        <div id="onThisDay" class="on-this-day"></div><div id="timeline" class="timeline"></div></section>
+      <section class="feature-grid">
+        <section class="task-panel feature-panel"><div class="panel-heading"><div><h2>☁️ 云端回忆</h2><p class="muted">记录重要经历，按关键词或日期找回过去。</p></div></div>
+          <form id="memoryForm" class="feature-form"><input id="memoryTitle" maxlength="120" placeholder="回忆标题" required><input id="memoryDate" type="date" aria-label="回忆日期"><textarea id="memoryBody" maxlength="10000" rows="3" placeholder="写下这段回忆……" required></textarea><button class="btn btn-primary" type="submit">保存到云端</button></form>
+          <input id="memorySearch" class="feature-search" type="search" placeholder="搜索回忆标题或内容…"><div id="memoryList" class="memory-list"></div>
+        </section>
+        <section class="task-panel feature-panel"><div class="panel-heading"><div><h2>💬 好友与聊天</h2><p class="muted">通过用户名添加好友；双方同意后才能聊天。</p></div></div>
+          <form id="handleForm" class="feature-form inline-feature"><input id="myHandle" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" placeholder="设置用户名（3–24 位字母/数字/下划线）" required><button class="btn btn-outline" type="submit">保存用户名</button></form>
+          <form id="friendForm" class="feature-form inline-feature"><input id="friendHandle" maxlength="24" placeholder="输入好友用户名" required><button class="btn btn-primary" type="submit">发送好友申请</button></form>
+          <div class="friend-columns"><div><h3>好友申请</h3><div id="requestList" class="memory-list"></div><h3>我的好友</h3><div id="friendList" class="memory-list"></div></div><div><h3 id="chatHeading">选择好友开始聊天</h3><div id="chatMessages" class="chat-messages"></div><form id="chatForm" class="feature-form inline-feature"><input id="chatText" maxlength="4000" placeholder="输入消息…" required disabled><button class="btn btn-primary" type="submit" disabled>发送</button></form></div></div>
+        </section>
+      </section>
+      <footer class="dashboard-footer">效率云 · 让每一项计划，都有进度。 <span class="release-label">免费使用</span><div class="footer-legal"><a href="./legal/terms.html" target="_blank" rel="noopener">服务条款</a><a href="./legal/privacy.html" target="_blank" rel="noopener">隐私政策</a><a href="./legal/disclaimer.html" target="_blank" rel="noopener">免责声明</a><a href="./legal/notices.html" target="_blank" rel="noopener">法律声明</a><a href="./legal/company.html" target="_blank" rel="noopener">公司声明</a><a href="./legal/ip.html" target="_blank" rel="noopener">原创与禁止侵权声明</a><a href="./legal/acceptable-use.html" target="_blank" rel="noopener">违法行为禁止声明</a><a href="./legal/account-deletion.html" target="_blank" rel="noopener">账户删除与数据权利</a></div><div class="footer-company">运营主体：Arden LLC · New Mexico Domestic Limited Liability Company · 独立创作声明：Yize Chen</div><div class="footer-copyright">© 2026 Yize Chen / Arden LLC。第三方商标及开源组件权利归其各自权利人所有。</div></footer>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="./app.js"></script>
+</body></html>

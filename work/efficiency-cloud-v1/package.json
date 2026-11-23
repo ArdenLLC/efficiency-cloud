@@ -1,0 +1,38 @@
+{
+  "name": "efficiency-cloud",
+  "version": "3.7.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "cap:sync": "cap sync",
+    "android": "cap open android",
+    "ios": "cap open ios",
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "cap:build:android": "npm run build && cap sync android",
+    "cap:build:ios": "npm run build && cap sync ios",
+    "check:release": "node scripts/check-release.mjs",
+    "apk:debug": "bash scripts/build-apk.sh debug",
+    "apk:release": "bash scripts/build-apk.sh release",
+    "prebuild": "node scripts/make-pwa-icons.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@supabase/supabase-js": "^2.57.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "vite": "^6.3.5",
+    "sharp": "^0.33.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

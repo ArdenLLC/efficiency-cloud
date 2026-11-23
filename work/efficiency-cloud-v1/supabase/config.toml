@@ -1,0 +1,17 @@
+project_id = "efficiency-cloud"
+
+[functions.create-cn-payment]
+verify_jwt = true
+
+[functions.cn-payment-notify]
+verify_jwt = false
+
+
+[functions.create-intl-payment]
+verify_jwt = true
+
+[functions.intl-payment-notify]
+verify_jwt = false
+
+[functions.security-email-alert]
+verify_jwt = true
