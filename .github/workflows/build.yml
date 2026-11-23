@@ -11,16 +11,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      K_A: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-      K_B: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-      K_C: ${{ secrets.SUPABASE_ANON_KEY }}
-      K_D: ${{ vars.SUPABASE_ANON_KEY }}
-      K_E: ${{ secrets.VITE_SUPABASE_KEY }}
-      K_F: ${{ vars.VITE_SUPABASE_KEY }}
-      U_A: ${{ secrets.VITE_SUPABASE_URL }}
-      U_B: ${{ vars.VITE_SUPABASE_URL }}
-      U_C: ${{ secrets.SUPABASE_URL }}
-      U_D: ${{ vars.SUPABASE_URL }}
+      K1: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      K2: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      K3: ${{ secrets.SUPABASE_ANON_KEY }}
+      K4: ${{ vars.SUPABASE_ANON_KEY }}
+      U1: ${{ secrets.VITE_SUPABASE_URL }}
+      U2: ${{ vars.VITE_SUPABASE_URL }}
+      U3: ${{ secrets.SUPABASE_URL }}
+      U4: ${{ vars.SUPABASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,8 +45,9 @@ jobs:
           DIR=$(cd "$(dirname "$P")" && pwd)
           echo "工程目录 = $DIR" >> "$S"
 
+          # ---------- 取 key ----------
           K=""
-          for v in "$K_A" "$K_B" "$K_C" "$K_D" "$K_E" "$K_F"; do
+          for v in "$K1" "$K2" "$K3" "$K4"; do
             if [ -z "$K" ] && [ -n "$v" ]; then K="$v"; fi
           done
           K=$(printf '%s' "$K" | tr -d '[:space:]')
@@ -58,24 +57,47 @@ jobs:
           if [ -z "$K" ]; then echo "::error::没找到 Supabase anon key"; exit 1; fi
           echo "key 长度 = ${#K}" >> "$S"
 
-          U=""
-          for v in "$U_A" "$U_B" "$U_C" "$U_D"; do
-            if [ -z "$U" ] && [ -n "$v" ]; then U="$v"; fi
+          # ---------- 从 key 里解出真实 ref / role ----------
+          REF=$(node -e 'try{const p=JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base64url").toString());process.stdout.write(p.ref||"")}catch(e){}' "$K")
+          ROLE=$(node -e 'try{const p=JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base64url").toString());process.stdout.write(p.role||"")}catch(e){}' "$K")
+          echo "key 里的项目 ref = ${REF:-（解不出）}" >> "$S"
+          echo "key 的 role = ${ROLE:-（未知）}" >> "$S"
+          if [ "$ROLE" = "service_role" ]; then echo "::error::这是 service_role，不能放进客户端，请改用 anon key"; exit 1; fi
+
+          # ---------- 候选地址：key 推出来的排第一 ----------
+          C=()
+          [ -n "$REF" ] && C+=("https://$REF.supabase.co")
+          for v in "$U1" "$U2" "$U3" "$U4"; do
+            v=$(printf '%s' "$v" | tr -d '[:space:]' | sed 's#/rest/v1/*$##; s#/*$##')
+            [ -n "$v" ] && C+=("$v")
           done
-          U=$(printf '%s' "$U" | tr -d '[:space:]' | sed 's#/rest/v1/*$##; s#/*$##')
-          if [ -z "$U" ]; then
-            REF=$(node -e 'try{const p=JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base64url").toString());process.stdout.write(p.ref||"")}catch(e){}' "$K")
-            if [ -n "$REF" ]; then U="https://$REF.supabase.co"; fi
-          fi
-          if [ -z "$U" ]; then
-            U=$(grep -hEo 'https://[a-z0-9]+\.supabase\.co' "$DIR"/.env* 2>/dev/null | head -1 || true)
-          fi
-          echo "项目地址 = $U" >> "$S"
+          for f in "$DIR"/.env*; do
+            [ -f "$f" ] || continue
+            v=$(grep -hEo 'https://[a-z0-9]+\.supabase\.co' "$f" 2>/dev/null | head -1 || true)
+            [ -n "$v" ] && C+=("$v")
+          done
 
-          CODE=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$U/rest/v1/" -H "apikey: $K" -H "Authorization: Bearer $K" || true)
-          echo "Supabase 返回码 = $CODE" >> "$S"
-          if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then echo "::error::key 与项目地址不匹配"; exit 1; fi
+          U=""
+          LAST=""
+          for c in "${C[@]}"; do
+            dup=0
+            for used in $LAST; do [ "$used" = "$c" ] && dup=1; done
+            [ $dup -eq 1 ] && continue
+            LAST="$LAST $c"
+            code=$(curl -s -m 15 -o /dev/null -w '%{http_code}' "$c/rest/v1/" -H "apikey: $K" -H "Authorization: Bearer $K" || true)
+            [ -z "$code" ] && code=000
+            echo "检测 $c → $code" >> "$S"
+            if [ "$code" = "200" ]; then U="$c"; break; fi
+          done
 
+          if [ -z "$U" ]; then
+            echo "::error::所有候选地址都验证失败。key 里的 ref=${REF}，请拿它和 Supabase 后台的 Project URL 对一下"
+            exit 1
+          fi
+          echo "最终使用地址 = $U" >> "$S"
+          echo "Supabase 返回码 = 200" >> "$S"
+
+          # ---------- 写 env（各种前缀都写，不管源码用哪种都能吃到）----------
           ENVF="$DIR/.env.production.local"
           {
             for pre in VITE REACT_APP NEXT_PUBLIC; do
@@ -85,7 +107,12 @@ jobs:
             echo "SUPABASE_URL=$U"
             echo "SUPABASE_ANON_KEY=$K"
           } > "$ENVF"
-          if [ ! -f "$DIR/.env" ]; then cp "$ENVF" "$DIR/.env"; fi
+          if [ -f "$DIR/.env" ]; then
+            sed -i '/SUPABASE_URL=/d; /SUPABASE_ANON_KEY=/d; /SUPABASE_KEY=/d' "$DIR/.env"
+            cat "$ENVF" >> "$DIR/.env"
+          else
+            cp "$ENVF" "$DIR/.env"
+          fi
 
           cd "$DIR"
           npm install --no-audit --no-fund > /tmp/npm.log 2>&1 || npm install --no-audit --no-fund --legacy-peer-deps > /tmp/npm.log 2>&1 || { tail -40 /tmp/npm.log; exit 1; }
@@ -96,10 +123,10 @@ jobs:
             if [ -f "$d/index.html" ]; then WEB="$d"; fi
           done
           if [ -z "$WEB" ]; then echo "::error::没有 index.html"; ls -la; exit 1; fi
-          if grep -rqF "$K" "$WEB"; then
+          if grep -rqF "$REF" "$WEB" 2>/dev/null; then
             echo "Supabase 注入状态 = OK" >> "$S"
           else
-            echo "Supabase 注入状态 = 未注入" >> "$S"
+            echo "Supabase 注入状态 = 未确认（不影响出包，装上看）" >> "$S"
           fi
 
           npm i -D @capacitor/cli > /dev/null 2>&1 || true
