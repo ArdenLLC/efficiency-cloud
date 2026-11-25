@@ -350,3 +350,25 @@ try{
     }
   }catch(e){}
 })();
+
+// 页脚法律链接：只保留《服务条款》《隐私政策》
+try{
+  var KEEP=['服务条款','隐私政策'];
+  var HIDE=['免责声明','法律声明','公司声明','原创与禁止侵权声明','违法行为禁止声明','账户删除与数据权利'];
+  var fixFooter=function(){
+    var el=document.querySelectorAll('a,button');
+    for(var i=0;i<el.length;i++){
+      var t=(el[i].textContent||'').replace(/\s/g,'');
+      if(!t||t.length>20)continue;
+      var keep=false;
+      for(var k=0;k<KEEP.length;k++){if(t===KEEP[k])keep=true;}
+      if(keep)continue;
+      for(var j=0;j<HIDE.length;j++){
+        if(t.indexOf(HIDE[j])>-1){el[i].style.display='none';break;}
+      }
+    }
+  };
+  fixFooter();
+  new MutationObserver(fixFooter).observe(document.body,{childList:true,subtree:true});
+  setInterval(fixFooter,2000);
+}catch(e){}
