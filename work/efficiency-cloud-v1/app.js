@@ -315,3 +315,38 @@ try{
     if(rp){rp.style.display='none'}
   }catch(e){}
 })();
+
+/* ===== 隐藏所有搜索框（元素保留，只隐藏） ===== */
+(function(){
+  try{
+    var st=document.getElementById('searchTasks');
+    if(st){st.style.display='none'}
+
+    var ms=document.getElementById('memorySearch');
+    if(ms){ms.style.display='none'}
+
+    /* 副标题里的「按关键词」已经没有搜索了，顺手改掉 */
+    var ps=document.querySelectorAll('.panel-heading p');
+    for(var i=0;i<ps.length;i++){
+      if(ps[i].textContent.indexOf('按关键词')>-1){
+        ps[i].textContent='记录重要经历，随时回看过去写下的片段。';
+      }
+    }
+
+    /* 空列表提示：「还没有匹配的回忆」→「还没有回忆」 */
+    var list=document.getElementById('memoryList');
+    if(list){
+      var fix=function(){
+        var els=list.querySelectorAll('*');
+        for(var k=0;k<els.length;k++){
+          var el=els[k];
+          if(el.children.length===0&&el.textContent.indexOf('匹配')>-1){
+            el.textContent=el.textContent.replace(/还没有匹配的回忆/g,'还没有回忆');
+          }
+        }
+      };
+      fix();
+      try{new MutationObserver(fix).observe(list,{childList:true,subtree:true,characterData:true})}catch(e){}
+    }
+  }catch(e){}
+})();
