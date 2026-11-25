@@ -285,3 +285,33 @@ try{
     };
   }
 }catch(e){}
+
+/* ===== 回忆表单按钮：去掉「云端」（JS 会重置，所以持续纠正） ===== */
+(function(){
+  try{
+    var form=document.getElementById('memoryForm');
+    if(!form)return;
+    var fix=function(){
+      var bs=form.querySelectorAll('button');
+      for(var i=0;i<bs.length;i++){
+        var t=bs[i].textContent||'';
+        if(t.indexOf('云端')>-1){
+          bs[i].textContent=t.replace(/保存到云端/g,'保存回忆')
+                              .replace(/更新到云端/g,'更新回忆')
+                              .replace(/云端/g,'');
+        }
+      }
+    };
+    fix();
+    try{new MutationObserver(fix).observe(form,{childList:true,subtree:true,characterData:true})}catch(e){}
+    setInterval(fix,1500);
+  }catch(e){}
+})();
+
+/* ===== 隐藏「回顾：我做过什么」整块 ===== */
+(function(){
+  try{
+    var rp=document.getElementById('reviewPanel');
+    if(rp){rp.style.display='none'}
+  }catch(e){}
+})();
