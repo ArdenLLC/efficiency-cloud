@@ -39,7 +39,10 @@ jobs:
           P=$(ls app/package.json app/*/package.json 2>/dev/null | head -1 || true)
           if [ -z "$P" ]; then echo "::error::zip 里没有 package.json"; find app -maxdepth 3; exit 1; fi
           DIR=$(cd "$(dirname "$P")" && pwd)
-          echo "工程目录 = $DIR" >> "$S"
+          echo "工程目录 = $DIR" >> "$5"
+                    cp work/efficiency-cloud-v1/app.js "$DIR/app.js"
+          grep -qF "gridColumn='1/-1'" "$DIR/app.js" || { echo "::error::app.js 没有界面收尾补丁"; exit 1; }
+          echo "app.js 已用 work/ 版本覆盖" >> "$S"
 
           K=""
           for v in "$K1" "$K2"; do if [ -z "$K" ] && [ -n "$v" ]; then K="$v"; fi; done
