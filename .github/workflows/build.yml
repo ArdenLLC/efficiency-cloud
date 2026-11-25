@@ -41,6 +41,8 @@ jobs:
           DIR=$(cd "$(dirname "$P")" && pwd)
           echo "工程目录 = $DIR" >> "$5"
                     cp work/efficiency-cloud-v1/app.js "$DIR/app.js"
+          echo "app.js 覆盖完成 / 行数 = $(wc -l < "$DIR/app.js")" >> "$S"
+                    cp work/efficiency-cloud-v1/app.js "$DIR/app.js"
           grep -qF "gridColumn='1/-1'" "$DIR/app.js" || { echo "::error::app.js 没有界面收尾补丁"; exit 1; }
           echo "app.js 已用 work/ 版本覆盖" >> "$S"
 
