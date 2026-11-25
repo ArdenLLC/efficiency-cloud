@@ -223,3 +223,65 @@ setInterval(()=>{if(currentUser&&!document.hidden)refreshAll();},120000);
 async function initialize(){if(!configured){setStatus('等待配置');$('authMessage').textContent='请配置 .env.local 中的 Supabase URL 与 Publishable Key 后启动。';$('authMessage').classList.add('error');return;}setStatus('云端连接中');const {data:{session},error}=await supabase.auth.getSession();if(error){setStatus('连接异常');$('authMessage').textContent=error.message;return;}if(session?.user){showDashboard(session.user);if(recoveryMode)$('recoveryStatus').textContent='如果你是通过密码恢复链接进入，请在下方设置新密码。';await refreshAll();startRealtime();}else{showAuth();setStatus('等待登录');}supabase.auth.onAuthStateChange((event,next)=>{if(next?.user){showDashboard(next.user);setStatus('云端已连接');if(event==='SIGNED_IN' && !recoveryMode) queueMicrotask(()=>sendSecurityAlert('new_sign_in'));if(event==='PASSWORD_RECOVERY'){recoveryMode=true;$('recoveryStatus').textContent='已验证恢复链接。请设置新密码以恢复账户。';$('newAccountPassword').focus();}queueMicrotask(()=>{refreshAll();startRealtime();});}else{stopRealtime();currentUser=null;tasks=[];profile=null;selectedFriendId=null;renderTasks();showAuth();setStatus('等待登录');}});}
 initialize();
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+
+/* ===== 效率云 · 界面收尾 v1（只隐藏与改文案，不删任何元素） ===== */
+(function(){
+  try{
+    var hide=function(el){if(el)el.style.display='none'};
+    var txt=function(el,t){if(el)el.textContent=t};
+
+    /* 1 好友与聊天整块隐藏；回忆面板撑满整行 */
+    var panels=document.querySelectorAll('.feature-panel');
+    for(var i=0;i<panels.length;i++){
+      if(panels[i].textContent.indexOf('好友与聊天')>-1){hide(panels[i])}
+      else{panels[i].style.gridColumn='1/-1'}
+    }
+
+    /* 2 效率云 ID 那一行隐藏（正在读取…/复制 ID），卡片其余全保留 */
+    var cid=document.getElementById('copyCloudId');
+    if(cid){hide(cid.closest('.account-id-row'))}
+
+    /* 3 手机号登录：页签和输入区一起隐藏 */
+    hide(document.querySelector('.auth-tabs'));
+    hide(document.getElementById('phoneAuthFields'));
+
+    /* 4 回忆文案：云端回忆 → 我的回忆；保存到云端 → 保存回忆 */
+    var hs=document.querySelectorAll('.feature-panel .panel-heading h2');
+    for(var j=0;j<hs.length;j++){
+      if(hs[j].textContent.indexOf('云端回忆')>-1){txt(hs[j],'📔 我的回忆')}
+    }
+    txt(document.querySelector('#memoryForm button[type="submit"]'),'保存回忆');
+
+    /* 5 账户说明去掉「好友」二字 */
+    var ps=document.querySelectorAll('.account-panel .panel-heading p');
+    for(var k=0;k<ps.length;k++){
+      if(ps[k].textContent.indexOf('好友')>-1){
+        txt(ps[k],'一个独立账户，在支持效率云的设备间同步你的任务与回忆。')
+      }
+    }
+
+    /* 6 Apple ID 小字 + Google/Apple 按钮 + 「或使用以下方式继续」 */
+    var fp=document.querySelectorAll('.fine-print');
+    for(var m=0;m<fp.length;m++){
+      if(fp[m].textContent.indexOf('Apple ID')>-1){hide(fp[m])}
+    }
+    hide(document.getElementById('socialAuth'));
+    hide(document.getElementById('authDivider'));
+  }catch(e){}
+})();
+
+/* ===== 提示气泡里的「云端」也换掉（失败自动跳过） ===== */
+try{
+  var _toast0=toast;
+  if(typeof _toast0==='function'){
+    toast=function(msg){
+      if(typeof msg==='string'){
+        msg=msg.replace(/已保存到云端/g,'已保存')
+               .replace(/保存到云端/g,'保存')
+               .replace(/云端回忆/g,'我的回忆')
+               .replace(/云端/g,'');
+      }
+      return _toast0(msg);
+    };
+  }
+}catch(e){}
