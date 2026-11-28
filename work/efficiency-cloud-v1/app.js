@@ -372,3 +372,92 @@ try{
   new MutationObserver(fixFooter).observe(document.body,{childList:true,subtree:true});
   setInterval(fixFooter,2000);
 }catch(e){}
+
+// ===== 收尾补丁 =====
+try{
+  if(!document.getElementById('ec-fix-style')){
+    var st=document.createElement('style');
+    st.id='ec-fix-style';
+    st.textContent='html,body{overflow-x:hidden}'+
+      '*,*::before,*::after{box-sizing:border-box}'+
+      'input:not([type=checkbox]):not([type=radio]),select,textarea{box-sizing:border-box;max-width:100%;display:inline-block;vertical-align:middle;margin:7px 0}'+
+      'label{display:inline-block;vertical-align:middle;margin:0}'+
+      'button[type=submit]{width:100%;min-height:46px}';
+    document.head.appendChild(st);
+  }
+  var fixInputs=function(){
+    var ins=document.querySelectorAll('input,select,textarea');
+    for(var i=0;i<ins.length;i++){
+      var el=ins[i],t=(el.type||'').toLowerCase();
+      if(t==='checkbox'||t==='radio'||t==='hidden'||t==='submit'||t==='button'||t==='file')continue;
+      var p=el.parentNode;
+      if(p&&p.nodeType===1){
+        var d=(window.getComputedStyle(p).display||'');
+        if(d.indexOf('flex')>-1||d.indexOf('grid')>-1){p.style.display='block';}
+      }
+      el.style.width='100%';
+      var prev=el.previousElementSibling;
+      if(prev&&prev.tagName==='LABEL'){
+        prev.style.width='76px';
+        prev.style.fontSize='14px';
+        prev.style.fontWeight='600';
+        el.style.width='calc(100% - 86px)';
+      }
+      if(!(el.nextElementSibling&&(''+el.nextElementSibling.className).indexOf('ec-br')>-1)){
+        var br=document.createElement('div');
+        br.className='ec-br';
+        br.style.cssText='display:block;height:0;line-height:0;font-size:0;clear:both';
+        el.parentNode.insertBefore(br,el.nextSibling);
+      }
+    }
+  };
+  var fixAgree=function(){
+    var b=document.querySelectorAll('label,div,p,span');
+    for(var i=0;i<b.length;i++){
+      var box=b[i];
+      if(box.__ecAgree||(box.textContent||'').indexOf('我已阅读并同意')<0)continue;
+      var inner=false,ch=box.children;
+      for(var k=0;k<ch.length;k++){if((ch[k].textContent||'').indexOf('我已阅读并同意')>-1){inner=true;break;}}
+      if(inner)continue;
+      box.__ecAgree=true;
+      var w=document.createTreeWalker(box,NodeFilter.SHOW_TEXT,null),tn=null,pos=-1,n;
+      while(n=w.nextNode()){
+        var q=(n.nodeValue||'').indexOf('隐私政策');
+        if(q>-1){tn=n;pos=q;}
+      }
+      if(tn){
+        tn.nodeValue=tn.nodeValue.substring(0,pos+4);
+        var m=tn;
+        while(m&&m!==box){
+          while(m.nextSibling){m.parentNode.removeChild(m.nextSibling);}
+          m=m.parentNode;
+        }
+        box.appendChild(document.createTextNode('。'));
+      }
+    }
+  };
+  var KEEP=['服务条款','隐私政策'];
+  var HIDE=['免责声明','法律声明','公司声明','原创与禁止侵权声明','违法行为禁止声明','账户删除与数据权利'];
+  var fixFooter=function(){
+    var el=document.querySelectorAll('a,button');
+    for(var i=0;i<el.length;i++){
+      var s=(el[i].textContent||'').replace(/\s/g,'');
+      if(!s||s.length>20)continue;
+      var keep=false;
+      for(var k=0;k<KEEP.length;k++){if(s===KEEP[k])keep=true;}
+      if(keep)continue;
+      for(var h=0;h<HIDE.length;h++){
+        if(s.indexOf(HIDE[h])>-1){el[i].style.display='none';break;}
+      }
+    }
+  };
+  var run=function(){
+    try{fixInputs();}catch(e){}
+    try{fixAgree();}catch(e){}
+    try{fixFooter();}catch(e){}
+  };
+  run();
+  window.addEventListener('load',run);
+  new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
+  setInterval(run,2500);
+}catch(e){}
