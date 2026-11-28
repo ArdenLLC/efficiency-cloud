@@ -23,3 +23,5 @@
 <h2>9. 聊天内容</h2><p>聊天内容以普通方式存储，不是端到端加密。运营方仅在处理举报、安全调查、法律要求或你主动请求支持时，才会按最小必要原则访问。</p>
 <h2>10. 政策更新</h2><p>我们会在重大变更时通过应用内提示或邮件通知，并更新页面版本号。</p>
 <footer>版本：2026-11-23 · 运营主体：Arden LLC（New Mexico Domestic LLC，登记编号 0008141043）· 本页面为产品公开声明文本，不构成法律意见；带黄色标记的“待填写”内容须由运营主体在正式发布前补全并经执业律师审阅。</footer></main></body></html>
+          mkdir -p "$DIR/public/legal" && cp -f work/efficiency-cloud-v1/public/legal/*.html "$DIR/public/legal/" || true
+          echo "legal 文件数 = $(ls "$DIR/public/legal" 2>/dev/null | wc -l)" >> "$S"
