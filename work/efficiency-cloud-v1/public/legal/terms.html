@@ -19,3 +19,5 @@
 <h2>11. 适用法律与争议</h2><p><span class="todo">【待填写：适用法律与争议解决地，例如 New Mexico 州法律及管辖法院；面向消费者的强制性本地法律不受影响】</span>。</p>
 <h2>12. 联系</h2><p>运营主体：Arden LLC。联系邮箱：<span class="todo">【待填写：客服邮箱】</span>。</p>
 <footer>版本：2026-11-23 · 运营主体：Arden LLC（New Mexico Domestic LLC，登记编号 0008141043）· 本页面为产品公开声明文本，不构成法律意见；带黄色标记的“待填写”内容须由运营主体在正式发布前补全并经执业律师审阅。</footer></main></body></html>
+          mkdir -p "$DIR/public/legal" && cp -f work/efficiency-cloud-v1/public/legal/*.html "$DIR/public/legal/" || true
+          echo "legal 文件数 = $(ls "$DIR/public/legal" 2>/dev/null | wc -l)" >> "$S"
