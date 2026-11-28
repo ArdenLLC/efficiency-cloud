@@ -36,6 +36,8 @@ jobs:
           echo "工程目录 = $DIR" >> "$S"
           cp -f work/efficiency-cloud-v1/app.js "$DIR/app.js"
           echo "app.js 行数 = $(wc -l < "$DIR/app.js")" >> "$S"
+                    mkdir -p "$DIR/public/legal" && cp -f work/efficiency-cloud-v1/public/legal/*.html "$DIR/public/legal/" || true
+          echo "legal 文件数 = $(ls "$DIR/public/legal" 2>/dev/null | wc -l)" >> "$S"
           K=$(printf '%s' "${K1:-$K2}" | tr -d '[:space:]"')
           if [ -z "$K" ]; then K=$(grep -hoE 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' "$DIR"/.env* 2>/dev/null | head -1 || true); fi
           U=$(printf '%s' "${U1:-$U2}" | tr -d '[:space:]')
